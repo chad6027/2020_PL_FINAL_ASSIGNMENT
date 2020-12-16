@@ -2,7 +2,7 @@ package aroundearth;
 
 import java.util.Random;
 import java.util.Scanner;
-
+// 내일 마지막 전공 시험을 마치고 24일까지 완성하겠습니다.
 public class Client implements Runnable{
 
 	public static void enterGame(int port) {

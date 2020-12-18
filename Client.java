@@ -32,15 +32,16 @@ public class Client {
 		out.println(nickname);
 		
 		ReadThread rT = new ReadThread();
-		rT.run();
+		
+		rT.run(); // 여기서 블락되는 issue why?
 	}
 	
 	public static void discuss() {
-		scv = new Scanner(System.in);
+		String msg;
 		while(true) {
-			out.println(scv.nextLine());
+			msg = scv.nextLine();
+			out.println(msg);
 		}
-		//scv.close();
 	}
 	
 
@@ -59,7 +60,7 @@ public class Client {
 
 		while(true) {
 			
-			System.out.println("1. 방 참가\n2. 방만들기");
+			System.out.println("1. 방 참가\n2. 방 만들기");
 			int particpate = scv.nextInt();
 			int port;
 			
@@ -133,11 +134,8 @@ public class Client {
 				// TODO Auto-generated catch block
 				e.printStackTrace();
 			}
-			
-			
 		}
 	}
-	
 }
 
 

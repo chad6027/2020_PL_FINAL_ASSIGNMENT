@@ -14,7 +14,7 @@ import java.util.concurrent.ThreadPoolExecutor;
 public class Server implements Runnable{
 	
 	public int port;
-	private final int max_client_num = 3;
+	private final int max_client_num = 10;
 	private  static Socket client_sock;
 	private  static HashMap<String, Socket> client_socks = new HashMap<String, Socket>();
 	private  static HashMap<Socket, PrintWriter> client_outBuffers = new HashMap<Socket, PrintWriter>();
@@ -27,6 +27,8 @@ public class Server implements Runnable{
 			
 			System.out.println("연결 대기 중 ......");
 			client_sock = sSocket.accept();
+			System.out.println("Connected list");
+		
 			
 			ChatThread ct = new ChatThread(client_sock);
 			eService.execute(ct);
@@ -63,12 +65,13 @@ public class Server implements Runnable{
 	public void run() {
 		// TODO Auto-generated method stub
 
-		ExecutorService client_thread_pool = Executors.newFixedThreadPool(4);
+		ExecutorService client_thread_pool = Executors.newFixedThreadPool(max_client_num);
 		
 		for(int i = 0 ; i < max_client_num; ++i) {
 			waitForClient(client_thread_pool); 
+			
 		}
-		
+		client_socks.forEach((nick, clnt) ->{ System.out.println("nickname : " + nick + "\tcclient_sock : " + clnt);});
 		setSkrull();
 		
 		
@@ -85,35 +88,45 @@ public class Server implements Runnable{
 	
 	public synchronized void sendMsg(String msg) {
 		
-		client_outBuffers.forEach((clnt, out)->{ out.println(msg);});
+		client_outBuffers.forEach((clnt, out)->{ out.println(msg); System.out.println("Send msg to " + clnt);});
 		
 	}
 	
 	//-------------------------------------------
 	class ChatThread implements Runnable{
+		private Socket clnt_sock;
 		private BufferedReader br;
 		private PrintWriter out;
 		private String nickname;
 		
 		
 		public ChatThread(Socket client_sock) throws IOException {
+			clnt_sock = client_sock;
 			br = new BufferedReader(new InputStreamReader(client_sock.getInputStream()));
 			out = new PrintWriter(client_sock.getOutputStream(), true);
 			nickname = br.readLine();
 			
+			System.out.println("ChatThread");
+			
 			addClient(nickname, client_sock);
 			addOutBuffer(client_sock, out);
+			
+			sendMsg(nickname + " has entered the chat");
 		}
 
 		@Override
 		// 입출력을 여기서 처리
 		// 서버는 듣고 보내주기만 하면 된다. 
 		public void run() {
+			System.out.println("ChatThread Run");
 			// TODO Auto-generated method stub
 			String client_msg;
 			try {
+				
 				while( (client_msg = br.readLine()) != null){
+					System.out.println(client_msg);
 					sendMsg(nickname + " : " + client_msg);
+					
 				}
 			} catch (IOException e) {
 				// TODO Auto-generated catch block

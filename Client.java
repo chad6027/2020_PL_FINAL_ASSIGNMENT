@@ -32,8 +32,7 @@ public class Client {
 		out.println(nickname);
 		
 		ReadThread rT = new ReadThread();
-		
-		rT.run(); // 여기서 블락되는 issue why?
+		new Thread(rT).start();
 	}
 	
 	public static void discuss() {
@@ -41,6 +40,7 @@ public class Client {
 		while(true) {
 			msg = scv.nextLine();
 			out.println(msg);
+			out.flush();
 		}
 	}
 	
@@ -86,10 +86,17 @@ public class Client {
 				Random rand = new Random();
 				port = 8000 + rand.nextInt(2000);
 				System.out.println("New Room's Port number : " + port);
-				// Server를 쓰레드로 생성
-				Server new_server = new Server(port);
-				new_server.run();
-				
+				// Server를 쓰레드로 생성				
+				try {
+					Server new_server = new Server(port);
+					new Thread(new_server).start();
+					enterGame(port);
+				} catch (IOException e1) {
+					// TODO Auto-generated catch block
+					System.out.println("Fail to create the game");
+					e1.printStackTrace();
+				}
+		
 				
 				break;
 			}

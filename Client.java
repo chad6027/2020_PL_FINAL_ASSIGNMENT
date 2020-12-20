@@ -22,6 +22,7 @@ public class Client {
 	private static PrintWriter out;
 	private static BufferedReader br;
 	private static Scanner scv = new Scanner(System.in);
+	private static boolean writeThread_on = true;
 	
 	public static void enterGame(int port) throws UnknownHostException, IOException {
 		
@@ -36,12 +37,8 @@ public class Client {
 	}
 	
 	public static void discuss() {
-		String msg;
-		while(true) {
-			msg = scv.nextLine();
-			out.println(msg);
-			out.flush();
-		}
+		WriteThread wT = new WriteThread();
+		new Thread(wT).start();
 	}
 	
 
@@ -56,6 +53,7 @@ public class Client {
 	
 	
 	public static void main(String[] args) {
+		
 		setNickname();
 
 		while(true) {
@@ -64,10 +62,28 @@ public class Client {
 			int particpate = scv.nextInt();
 			int port;
 			
-			if(particpate == 1) {
-				// port 번호 입력 후 enterGame()
-				System.out.print("Port : ");
-				port = scv.nextInt();
+			if(particpate == 1 || particpate == 2) {
+				if(particpate == 1) {
+					// port 번호 입력 후 enterGame()
+					System.out.print("Port : ");
+					port = scv.nextInt();
+				}
+				else {
+					// 랜덤 생성한 port 번호를 이용하여 자동 참가
+					Random rand = new Random();
+					port = 8000 + rand.nextInt(2000);
+					System.out.println("New Room's Port number : " + port);
+					
+					
+					//create Server
+					try {
+						Server new_server = new Server(port);
+						new Thread(new_server).start();
+					} catch (IOException e) {
+						// TODO Auto-generated catch block
+						e.printStackTrace();
+					}
+				}
 				
 				try {
 					enterGame(port);
@@ -78,25 +94,6 @@ public class Client {
 					// TODO Auto-generated catch block
 					e.printStackTrace();
 				}
-				
-				break;
-			}
-			else if(particpate == 2) {
-				// 랜덤 생성한 port 번호를 이용하여 자동 참가
-				Random rand = new Random();
-				port = 8000 + rand.nextInt(2000);
-				System.out.println("New Room's Port number : " + port);
-				// Server를 쓰레드로 생성				
-				try {
-					Server new_server = new Server(port);
-					new Thread(new_server).start();
-					enterGame(port);
-				} catch (IOException e1) {
-					// TODO Auto-generated catch block
-					System.out.println("Fail to create the game");
-					e1.printStackTrace();
-				}
-		
 				
 				break;
 			}
@@ -135,11 +132,37 @@ public class Client {
 			try {
 				while( (read_msg = br.readLine()) != null)
 				{
-					System.out.println(read_msg);
+					//Server에서 command를 보내는 경우
+					if(read_msg.substring(0, 7).equals("Command:")) {
+						
+					}
+					//command가 아니면 터미널에 출력
+					else
+						System.out.println(read_msg);
 				}
 			} catch (IOException e) {
 				// TODO Auto-generated catch block
 				e.printStackTrace();
+			}
+		}
+	}
+	
+	static class WriteThread implements Runnable {
+		protected static PrintWriter out;
+		
+		public WriteThread() {
+			this.out = Client.out;
+		}
+		
+		@Override
+		// 출력 스트림 분리
+		public void run() {
+			// TODO Auto-generated method stub
+			String msg;
+			while(true) {
+				msg = scv.nextLine();
+				out.println(msg);
+				out.flush();
 			}
 		}
 	}

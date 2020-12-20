@@ -8,6 +8,7 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.HashMap;
 import java.util.Iterator;
+import java.util.Queue;
 import java.util.Random;
 import java.util.Vector;
 import java.util.concurrent.ExecutorService;
@@ -17,17 +18,24 @@ import java.util.concurrent.ThreadPoolExecutor;
 public class Server implements Runnable{
 	
 	public int port;
+	private int day;
 	private int skrull_number;
 	private final int max_client_num = 3;
+	private boolean VOTE_MODE = false;
+
 	private  static Socket client_sock;
 	private  static ServerSocket sSocket;
 	
-	private static Vector<Socket> client_socks_v= new Vector<Socket>(); 
+	private static Vector<Pair<Socket, Boolean>> client_socks_v= new Vector<Pair<Socket, Boolean>>(); 
 	private  static HashMap<String, Socket> client_socks = new HashMap<String, Socket>();
+	private  static HashMap<Socket, Pair<BufferedReader, Boolean>> client_inBuffers = new HashMap<Socket, Pair<BufferedReader, Boolean>>();
 	private  static HashMap<Socket, PrintWriter> client_outBuffers = new HashMap<Socket, PrintWriter>();
 	
 	public Server(int port) throws IOException {
 		this.port = port;
+		skrull_number = 0;
+		day = 0;
+		
 		sSocket = new ServerSocket(port);
 	}
 	
@@ -46,9 +54,9 @@ public class Server implements Runnable{
 			
 	}
 	
-	public void addClient(String nickname, Socket clnt_sock) {
+	public synchronized void addClient(String nickname, Socket clnt_sock) {
 		client_socks.put(nickname, clnt_sock);
-		client_socks_v.add(clnt_sock);
+		client_socks_v.add(new Pair<Socket, Boolean>(clnt_sock, true));
 		sendMsg(clnt_sock, nickname + "님이 입장하셨습니다.");
 	}
 	
@@ -58,31 +66,113 @@ public class Server implements Runnable{
 		
 	}
 	
-	public void addOutBuffer(Socket clnt_sock, PrintWriter out) {
+	public synchronized void addBuffer(Socket clnt_sock, BufferedReader br, PrintWriter out) {
+		client_inBuffers.put(clnt_sock, new Pair<BufferedReader, Boolean>(br, true));
 		client_outBuffers.put(clnt_sock, out);
 	}
 	
-	public int getVoting() {
+	
+	public void night() {
+		final String[] day_in_korean = {"첫", "두", "세", "네", "다섯", "여섯", "일곱", "여덟", "아홉", "열"};
+		
+		broadcast(day_in_korean[day] + "번째 밤이 왔습니다");
+		
+		if(day == 0)
+			setSkrull();
+		else 
+			setKilled();
+			
+	}
+	
+	public void setSkrull() {
+		broadcast("Skrull을 선정하겠습니다.");
+		Random rand = new Random();
+		skrull_number = rand.nextInt(max_client_num);
+		for(int i = 0; i < max_client_num; i++) {
+			if(i == skrull_number) 
+				client_outBuffers.get(client_socks_v.get(i).getFirst()).println("----------\n| Skrull |\n----------");
+			else
+				client_outBuffers.get(client_socks_v.get(i).getFirst()).println("----------\n|  Human |\n----------");
+		}
+		
+		broadcast("Skrull을 선정이 완료되었습니다.\n 각자의 역할을 다시 한번 확인해주세요.");
+	
+	}
+	
+	public int setKilled() {
+		broadcast("Skrull이 죽일 지구인을 고르고 있습니다...");
+		
+		
+		
+		
 		
 		return 0;
 	}
 	
-	public void setSkrull() {
-		broadcast("Skrull을 뽑는 중입니다.");
-		Random rand = new Random();
-		skrull_number = rand.nextInt(max_client_num);
+	public void morning() {
+		broadcast("아침이 되었습니다.");
 		
+		if(day++ != 0)
+			showVoteResult();
+
+		broadcast("2분동안 토론을 통해 Skrull로 의심되는 사람을 결정하세요!");
 		
-		for(int i = 0; i < max_client_num; i++) {
-			if(i == skrull_number) 
-				client_outBuffers.get(client_socks_v.get(i)).println("Skrull");
-			else
-				client_outBuffers.get(client_socks_v.get(i)).println("Human");
-		}
+		try {
+			Thread.sleep(1000 * 60 * 2); //2분동안 쓰레드 정지
+		} catch (InterruptedException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		} 
 		
-		
+		getVote();
+
 	}
 	
+
+	
+	public int getVote() {
+		
+		HashMap<String, Integer> result = new HashMap<String, Integer>();
+		
+		// ------------------------
+		
+		// Make All ReadThread pause
+		
+		// ------------------------
+		
+		setAllInBufferOff(); // All Read Buffer Off. If all ReadThread is paused, this function might not be needed... need to think about this part again.
+							
+		VOTE_MODE = true;
+		
+		
+		broadcast("투표를 시작하겠습니다.");
+		
+		client_socks
+		.forEach((nickname, clnt)->{
+			for( Pair<Socket, Boolean> wholive : client_socks_v) {
+				if(wholive.getFirst() == clnt) {
+					broadcast(nickname + "님이 투표중입니다.");
+					
+					
+					
+					break;
+				}
+			}
+			
+		});
+		
+		
+	
+		
+		
+		
+		return 0;
+	}
+	
+	public int showVoteResult() {
+		
+		return 0;
+	}
 	
 	public static synchronized void sendMsg(Socket sock, String msg) {
 		Socket clnt_from = sock;
@@ -94,6 +184,17 @@ public class Server implements Runnable{
 	}
 
 	
+	public static synchronized void setInBufferOn() {
+		client_socks_v.forEach( 
+			(clnt)->{ if(clnt.getSecond()) 
+						client_inBuffers.get(clnt.getFirst()).setSecond(true);
+					}
+			);
+	}
+	
+	public static synchronized void setAllInBufferOff() {
+		client_inBuffers.forEach((clnt, in)->{in.setSecond(false);});
+	}
 	
 
 	@Override
@@ -101,21 +202,19 @@ public class Server implements Runnable{
 		// TODO Auto-generated method stub
 		
 		ExecutorService client_thread_pool = Executors.newFixedThreadPool(max_client_num);
+		
+		
+		
 		for(int i = 0 ; i < max_client_num; ++i) {
 			waitForClient(client_thread_pool); 
-			System.out.println((max_client_num - 1 - i ) + "명 남았습니다.");
+			broadcast((max_client_num - 1 - i ) + "명 남았습니다.");
 		}
 		
-		System.out.println("Game Start");
-		
-		setSkrull();
-		
-		
 		while(true) {
-
-			// Client에게 채팅 시간 부여
 			
-			getVoting();
+			night();
+			
+			morning();
 			
 			// Game 종료 확인
 			
@@ -139,7 +238,7 @@ public class Server implements Runnable{
 			nickname = br.readLine();
 			
 			addClient(nickname, client_sock);
-			addOutBuffer(client_sock, out);
+			addBuffer(client_sock, br, out);
 			
 			sendMsg(clnt_sock, nickname + " has entered the chat");
 		}
@@ -153,7 +252,15 @@ public class Server implements Runnable{
 			try {
 				
 				while( (client_msg = br.readLine()) != null){
-					sendMsg(clnt_sock, nickname + " : " + client_msg);
+					if(VOTE_MODE) {
+						
+					}
+					else{
+						if(client_inBuffers.get(clnt_sock).getSecond())
+							sendMsg(clnt_sock, nickname + " : " + client_msg);
+						else
+							continue;
+					}	
 				}
 			} catch (IOException e) {
 				// TODO Auto-generated catch block
@@ -162,4 +269,30 @@ public class Server implements Runnable{
 		}
 	}
 }
+
+class Pair<F, S>{
+	F first;
+	S second;
+	public Pair(F first, S second) {
+		this.first = first;
+		this.second = second;
+	}
+	public void setfirst(F first) {
+		this.first = first;
+	}
+	public F getFirst() {
+		return this.first;
+	}
+	
+	public void setSecond(S second) {
+		this.second = second;
+	}
+	public S getSecond() {
+		return this.second;
+	}
+}
+
+
+
+
 

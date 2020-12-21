@@ -108,6 +108,13 @@ public class Client {
 			
 			discuss();
 			
+			try {
+				Thread.sleep(1000 * 60 * 5);
+			} catch (InterruptedException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
+			
 			vote();
 			
 			
@@ -133,11 +140,15 @@ public class Client {
 				while( (read_msg = br.readLine()) != null)
 				{
 					//Server에서 command를 보내는 경우
-					if(read_msg.substring(0, 7).equals("Command:")) {
-						
+					if(read_msg.length() > 9) {
+						System.out.println(read_msg.substring(9));
+						switch(read_msg.substring(9)){
+						case "ECHO":
+							out.println("Command: ECHO");
+						}
 					}
 					//command가 아니면 터미널에 출력
-					else
+					//else
 						System.out.println(read_msg);
 				}
 			} catch (IOException e) {

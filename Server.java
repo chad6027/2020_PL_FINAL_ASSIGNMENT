@@ -10,6 +10,7 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Queue;
 import java.util.Random;
+import java.util.Scanner;
 import java.util.Vector;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -22,9 +23,12 @@ public class Server implements Runnable{
 	private int skrull_number;
 	private final int max_client_num = 3;
 	private boolean VOTE_MODE = false;
-
+	private ExecutorService client_thread_pool = Executors.newFixedThreadPool(max_client_num);
+	private static Vector<ChatThread> threads = new Vector<ChatThread>();
+	
 	private  static Socket client_sock;
 	private  static ServerSocket sSocket;
+
 	
 	private static Vector<Pair<Socket, Boolean>> client_socks_v= new Vector<Pair<Socket, Boolean>>(); 
 	private  static HashMap<String, Socket> client_socks = new HashMap<String, Socket>();
@@ -45,6 +49,7 @@ public class Server implements Runnable{
 			try {
 				client_sock = sSocket.accept();
 				ChatThread ct = new ChatThread(client_sock);
+				threads.add(ct);
 				eService.execute(ct);
 			} catch (IOException e) {
 				// TODO Auto-generated catch block
@@ -85,7 +90,7 @@ public class Server implements Runnable{
 	}
 	
 	public void setSkrull() {
-		broadcast("Skrull을 선정하겠습니다.");
+		broadcast("\nSkrull을 선정하겠습니다.");
 		Random rand = new Random();
 		skrull_number = rand.nextInt(max_client_num);
 		for(int i = 0; i < max_client_num; i++) {
@@ -95,7 +100,7 @@ public class Server implements Runnable{
 				client_outBuffers.get(client_socks_v.get(i).getFirst()).println("----------\n|  Human |\n----------");
 		}
 		
-		broadcast("Skrull을 선정이 완료되었습니다.\n 각자의 역할을 다시 한번 확인해주세요.");
+		broadcast("Skrull 선정이 완료되었습니다.\n각자의 역할을 다시 한번 확인해주세요.");
 	
 	}
 	
@@ -110,19 +115,19 @@ public class Server implements Runnable{
 	}
 	
 	public void morning() {
-		broadcast("아침이 되었습니다.");
+		broadcast("\n아침이 되었습니다.");
 		
 		if(day++ != 0)
 			showVoteResult();
 
 		broadcast("2분동안 토론을 통해 Skrull로 의심되는 사람을 결정하세요!");
 		
-		try {
-			Thread.sleep(1000 * 60 * 2); //2분동안 쓰레드 정지
-		} catch (InterruptedException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		} 
+//		try {
+//			Thread.sleep(1000 * 60 * 2); //2분동안 쓰레드 정지
+//		} catch (InterruptedException e) {
+//			// TODO Auto-generated catch block
+//			e.printStackTrace();
+//		} 
 		
 		getVote();
 
@@ -137,13 +142,23 @@ public class Server implements Runnable{
 		// ------------------------
 		
 		// Make All ReadThread pause
+		VOTE_MODE = true;
+		for(int i = 0; i < max_client_num;i++) {
+			sendMsgToOne(client_socks_v.elementAt(i).getFirst(), "Command: ECHO");
+			try {
+				Thread.sleep(100);
+			} catch (InterruptedException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
+		}
 		
 		// ------------------------
 		
-		setAllInBufferOff(); // All Read Buffer Off. If all ReadThread is paused, this function might not be needed... need to think about this part again.
+		//setAllInBufferOff(); // All Read Buffer Off. If all ReadThread is paused, this function might not be needed... need to think about this part again.
 							
-		VOTE_MODE = true;
-		
+		new Thread(new WakeChatThread());
+
 		
 		broadcast("투표를 시작하겠습니다.");
 		
@@ -162,7 +177,7 @@ public class Server implements Runnable{
 		});
 		
 		
-	
+		VOTE_MODE = false;
 		
 		
 		
@@ -172,6 +187,11 @@ public class Server implements Runnable{
 	public int showVoteResult() {
 		
 		return 0;
+	}
+	
+	public static synchronized void sendMsgToOne(Socket sock, String msg) {
+		Socket clnt = sock;
+		client_outBuffers.get(clnt).write(msg);
 	}
 	
 	public static synchronized void sendMsg(Socket sock, String msg) {
@@ -201,9 +221,6 @@ public class Server implements Runnable{
 	public void run() {
 		// TODO Auto-generated method stub
 		
-		ExecutorService client_thread_pool = Executors.newFixedThreadPool(max_client_num);
-		
-		
 		
 		for(int i = 0 ; i < max_client_num; ++i) {
 			waitForClient(client_thread_pool); 
@@ -224,12 +241,24 @@ public class Server implements Runnable{
 
 	
 	//-------------------------------------------
-	class ChatThread implements Runnable{
+	class WakeChatThread extends ChatThread{
+		public WakeChatThread() {
+			
+		}
+		public void run() {
+			this.notifyAll();
+		}
+	}
+	
+	class ChatThread extends Thread{
 		private Socket clnt_sock;
 		private BufferedReader br;
 		private PrintWriter out;
 		private String nickname;
 		
+		public ChatThread() {
+			
+		}
 		
 		public ChatThread(Socket client_sock) throws IOException {
 			clnt_sock = client_sock;
@@ -242,7 +271,9 @@ public class Server implements Runnable{
 			
 			sendMsg(clnt_sock, nickname + " has entered the chat");
 		}
+		
 
+		
 		@Override
 		// 입출력을 여기서 처리
 		// 서버는 듣고 보내주기만 하면 된다. 
@@ -253,7 +284,12 @@ public class Server implements Runnable{
 				
 				while( (client_msg = br.readLine()) != null){
 					if(VOTE_MODE) {
-						
+						synchronized(this) {
+							System.out.println(nickname + " is going to sleep");
+							this.wait();
+							System.out.println(nickname + " is awake");
+							VOTE_MODE = false;
+						}
 					}
 					else{
 						if(client_inBuffers.get(clnt_sock).getSecond())
@@ -262,7 +298,7 @@ public class Server implements Runnable{
 							continue;
 					}	
 				}
-			} catch (IOException e) {
+			} catch (IOException | InterruptedException e) {
 				// TODO Auto-generated catch block
 				removeClient(nickname);
 			}

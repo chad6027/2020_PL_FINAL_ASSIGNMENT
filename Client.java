@@ -140,15 +140,11 @@ public class Client {
 				while( (read_msg = br.readLine()) != null)
 				{
 					//Server에서 command를 보내는 경우
-					if(read_msg.length() > 9) {
-						System.out.println(read_msg.substring(9));
-						switch(read_msg.substring(9)){
-						case "ECHO":
-							out.println("Command: ECHO");
-						}
+					if(read_msg.equals("Command: ECHO") || read_msg.equals("Command: KILL")) {
+						out.println(read_msg);
 					}
 					//command가 아니면 터미널에 출력
-					//else
+					else
 						System.out.println(read_msg);
 				}
 			} catch (IOException e) {

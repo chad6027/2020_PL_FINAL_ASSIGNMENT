@@ -19,12 +19,13 @@ import java.util.concurrent.ThreadPoolExecutor;
 public class Server implements Runnable{
 	
 	public int port;
+	public String who = new String("");
 	private int day;
-	private int skrull_number;
+	private Socket skrull;
 	private final int max_client_num = 3;
 	private boolean VOTE_MODE = false;
+	private boolean KILL_MODE = false;
 	private ExecutorService client_thread_pool = Executors.newFixedThreadPool(max_client_num);
-	private static Vector<ChatThread> threads = new Vector<ChatThread>();
 	
 	private  static Socket client_sock;
 	private  static ServerSocket sSocket;
@@ -37,7 +38,6 @@ public class Server implements Runnable{
 	
 	public Server(int port) throws IOException {
 		this.port = port;
-		skrull_number = 0;
 		day = 0;
 		
 		sSocket = new ServerSocket(port);
@@ -49,7 +49,6 @@ public class Server implements Runnable{
 			try {
 				client_sock = sSocket.accept();
 				ChatThread ct = new ChatThread(client_sock);
-				threads.add(ct);
 				eService.execute(ct);
 			} catch (IOException e) {
 				// TODO Auto-generated catch block
@@ -92,9 +91,10 @@ public class Server implements Runnable{
 	public void setSkrull() {
 		broadcast("\nSkrull을 선정하겠습니다.");
 		Random rand = new Random();
-		skrull_number = rand.nextInt(max_client_num);
+		skrull = client_socks_v.elementAt(rand.nextInt(max_client_num)).getFirst();
+		
 		for(int i = 0; i < max_client_num; i++) {
-			if(i == skrull_number) 
+			if(client_socks_v.elementAt(i).getFirst() == skrull) 
 				client_outBuffers.get(client_socks_v.get(i).getFirst()).println("----------\n| Skrull |\n----------");
 			else
 				client_outBuffers.get(client_socks_v.get(i).getFirst()).println("----------\n|  Human |\n----------");
@@ -105,10 +105,40 @@ public class Server implements Runnable{
 	}
 	
 	public int setKilled() {
-		broadcast("Skrull이 죽일 지구인을 고르고 있습니다...");
+		setAllInBufferOff();
+		
+		Socket sockIsKilled;
+		broadcast("\nSkrull이 죽일 지구인을 고르고 있습니다...");
+		sendMsgToOne(skrull, "\n지금 메세지는 Skrull에게만 보입니다.\n현재 살아있는 지구인은\n");
+		
+		
+		client_socks
+		.forEach((nickname, clnt)->{
+			for( Pair<Socket, Boolean> wholive : client_socks_v) {
+				if(wholive.getFirst() != skrull && wholive.getSecond()) {
+					sendMsgToOne(skrull, nickname);
+					break;
+				}
+			}	
+		});
+		sendMsgToOne(skrull, "입니다.");
+		
+		KILL_MODE = true;
+		client_inBuffers.get(skrull).setSecond(true);
+		sendMsgToOne(skrull, "\n죽일 지구인을 선택해주세요.");
+		MBox(skrull);
+		sockIsKilled = client_socks.get(who);
+		KILL_MODE = false;
 		
 		
 		
+		// 죽은 client의 정보 update
+		for(Pair<Socket, Boolean> sock : client_socks_v) {
+			if(sock.getFirst() == sockIsKilled) {
+				sock.setSecond(false);
+				break;
+			}
+		}
 		
 		
 		return 0;
@@ -118,7 +148,7 @@ public class Server implements Runnable{
 		broadcast("\n아침이 되었습니다.");
 		
 		if(day++ != 0)
-			showVoteResult();
+			showKilledResult();
 
 		broadcast("2분동안 토론을 통해 Skrull로 의심되는 사람을 결정하세요!");
 		
@@ -138,55 +168,101 @@ public class Server implements Runnable{
 	public int getVote() {
 		
 		HashMap<String, Integer> result = new HashMap<String, Integer>();
+		for(String key : client_socks.keySet())
+			result.put(key, 0);
+		
 		
 		// ------------------------
+		int max_vote = 0;
+		String whoIsKilled = new String();
+		Socket sockIsKilled;
 		
-		// Make All ReadThread pause
 		VOTE_MODE = true;
-		for(int i = 0; i < max_client_num;i++) {
-			sendMsgToOne(client_socks_v.elementAt(i).getFirst(), "Command: ECHO");
-			try {
-				Thread.sleep(100);
-			} catch (InterruptedException e) {
-				// TODO Auto-generated catch block
-				e.printStackTrace();
-			}
-		}
-		
-		// ------------------------
-		
-		//setAllInBufferOff(); // All Read Buffer Off. If all ReadThread is paused, this function might not be needed... need to think about this part again.
-							
-		new Thread(new WakeChatThread());
+		setAllInBufferOff(); // All Read Buffer Off. If all ReadThread is paused, this function might not be needed... need to think about this part again.
 
 		
-		broadcast("투표를 시작하겠습니다.");
+		broadcast("\n투표를 시작하겠습니다.\n현재 생존자 목록은");
+		client_socks
+		.forEach((nickname, clnt)->{
+			for( Pair<Socket, Boolean> wholive : client_socks_v) {
+				if(wholive.getFirst() == clnt && wholive.getSecond()) {
+					broadcast(nickname);
+					break;
+				}
+			}	
+		});
+		broadcast("입니다.");
+		
+		
+		
 		
 		client_socks
 		.forEach((nickname, clnt)->{
 			for( Pair<Socket, Boolean> wholive : client_socks_v) {
-				if(wholive.getFirst() == clnt) {
+				if(wholive.getFirst() == clnt && wholive.getSecond()) {
+					
 					broadcast(nickname + "님이 투표중입니다.");
+					client_inBuffers.get(clnt).setSecond(true);
+					sendMsgToOne(clnt, "Command: ECHO");
 					
+					MBox(clnt);
 					
+					result.put(who, result.get(who) + 1);
 					
 					break;
 				}
 			}
-			
 		});
 		
 		
-		VOTE_MODE = false;
+		
+		broadcast("\n투표가 종료되었습니다.");
+		
+		for( String nick : result.keySet()) {
+			if(result.get(nick) > max_vote) {
+				whoIsKilled = nick;
+				max_vote = result.get(nick); 
+			}
+		}
+		
+		broadcast("\n투표 결과 " + whoIsKilled + "님이 죽었습니다.");
+		
+		// 결과 공지
+		sockIsKilled = client_socks.get(whoIsKilled); 
+		
+		if(sockIsKilled == skrull)
+			broadcast(whoIsKilled + "님은 Skrull 이었습니다.");
+		else
+			broadcast(whoIsKilled + "님은 Human 이었습니다.");
+		
+		// 죽은 client의 정보 update
+		for(Pair<Socket, Boolean> sock : client_socks_v) {
+			if(sock.getFirst() == sockIsKilled) {
+				sock.setSecond(false);
+				break;
+			}
+		}
 		
 		
-		
+		setInBufferOn(); // 살아있는 client들의 inBuffer On
+		VOTE_MODE = false;		
 		return 0;
 	}
 	
-	public int showVoteResult() {
-		
-		return 0;
+	public void showKilledResult() {
+		broadcast("간밤에 Skrull에 의해" + who + "님이 죽었습니다.");
+	}
+	
+	
+	public void MBox(Socket sock) {
+			synchronized (sock) {
+				try {
+					sock.wait();
+				} catch (InterruptedException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				}
+			}
 	}
 	
 	public static synchronized void sendMsgToOne(Socket sock, String msg) {
@@ -240,15 +316,7 @@ public class Server implements Runnable{
 	
 
 	
-	//-------------------------------------------
-	class WakeChatThread extends ChatThread{
-		public WakeChatThread() {
-			
-		}
-		public void run() {
-			this.notifyAll();
-		}
-	}
+	//------------------------------------------
 	
 	class ChatThread extends Thread{
 		private Socket clnt_sock;
@@ -283,22 +351,30 @@ public class Server implements Runnable{
 			try {
 				
 				while( (client_msg = br.readLine()) != null){
-					if(VOTE_MODE) {
-						synchronized(this) {
-							System.out.println(nickname + " is going to sleep");
-							this.wait();
-							System.out.println(nickname + " is awake");
-							VOTE_MODE = false;
+					
+					if(!client_inBuffers.get(clnt_sock).getSecond()) {
+						continue;
+					}
+					
+					
+					if(VOTE_MODE || KILL_MODE) {
+						while( (client_msg = br.readLine()) != null){
+							if(client_socks.containsKey(client_msg)) {
+								synchronized(clnt_sock) {
+									who = client_msg;
+									clnt_sock.notify();
+									break;
+								}
+							}
+							else
+								sendMsgToOne(clnt_sock, "다시 입력해주세요");
 						}
 					}
 					else{
-						if(client_inBuffers.get(clnt_sock).getSecond())
-							sendMsg(clnt_sock, nickname + " : " + client_msg);
-						else
-							continue;
+						sendMsg(clnt_sock, nickname + " : " + client_msg);
 					}	
 				}
-			} catch (IOException | InterruptedException e) {
+			} catch (IOException e) {
 				// TODO Auto-generated catch block
 				removeClient(nickname);
 			}

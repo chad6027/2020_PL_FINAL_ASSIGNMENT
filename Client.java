@@ -10,19 +10,16 @@ import java.util.Random;
 import java.util.Scanner;
 import aroundearth.Server;
 
-
-//---------------------------------------------
-//  
-//
-//
-//---------------------------------------------
 public class Client {
 	private static String nickname;
 	private static Socket client_sock;
 	private static PrintWriter out;
 	private static BufferedReader br;
 	private static Scanner scv = new Scanner(System.in);
-	private static boolean writeThread_on = true;
+	private static Thread rT;
+	private static Thread wT;
+	
+	
 	
 	public static void enterGame(int port) throws UnknownHostException, IOException {
 		
@@ -32,20 +29,16 @@ public class Client {
 						
 		out.println(nickname);
 		
-		ReadThread rT = new ReadThread();
-		new Thread(rT).start();
-	}
-	
-	public static void discuss() {
-		WriteThread wT = new WriteThread();
-		new Thread(wT).start();
-	}
-	
-
-	public static void vote() {
+		ReadThread r = new ReadThread();
+		WriteThread w = new WriteThread();
 		
+		rT = new Thread(r);
+		wT = new Thread(w);
+		
+		rT.start();
+		wT.start();
 	}
-	
+
 	public static void setNickname() {
 		System.out.println("사용할 닉네임을 입력해주세요.");
 		nickname = scv.nextLine();
@@ -101,30 +94,31 @@ public class Client {
 				System.out.println("옳지 않은 값을 입력하셨습니다");
 		}
 		
+		
+		
+		
 		// 게임이 종료될 때까지 반복
 		while(true) {
-		
-			// 제한된 시간동안 입력
 			
-			discuss();
-			
-			try {
-				Thread.sleep(1000 * 60 * 5);
-			} catch (InterruptedException e) {
-				// TODO Auto-generated catch block
-				e.printStackTrace();
+			synchronized(rT) {
+				try {
+					rT.wait(); // Server와 통신이 끊길 때까지 wait
+				} catch (InterruptedException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				}
 			}
 			
-			vote();
-			
-			
+			wT.interrupt();
+			scv.close();
+			break;
 		}
 		
 		//scv.close();
 	}
 
 	static class ReadThread implements Runnable {
-		protected static BufferedReader br;
+		protected BufferedReader br;
 		
 		public ReadThread() {
 			this.br = Client.br;
@@ -139,23 +133,22 @@ public class Client {
 			try {
 				while( (read_msg = br.readLine()) != null)
 				{
-					//Server에서 command를 보내는 경우
-					if(read_msg.equals("Command: ECHO") || read_msg.equals("Command: KILL")) {
-						out.println(read_msg);
-					}
-					//command가 아니면 터미널에 출력
-					else
 						System.out.println(read_msg);
 				}
 			} catch (IOException e) {
 				// TODO Auto-generated catch block
-				e.printStackTrace();
+				
+				// Server가 FIN을 보내면 서버 종료
+				synchronized(this) {
+					this.notify();
+				}
+				
 			}
 		}
 	}
 	
 	static class WriteThread implements Runnable {
-		protected static PrintWriter out;
+		protected PrintWriter out;
 		
 		public WriteThread() {
 			this.out = Client.out;
@@ -167,12 +160,23 @@ public class Client {
 			// TODO Auto-generated method stub
 			String msg;
 			while(true) {
-				msg = scv.nextLine();
-				out.println(msg);
-				out.flush();
+				try {
+					//interrupt를 쓰기 위해 100ms마다 입력이 없으면 Thread sleep
+					while(!scv.hasNextLine())
+						Thread.sleep(100);
+					
+					msg = scv.nextLine();
+					out.println(msg);
+					out.flush();
+				} catch (InterruptedException e) {
+						System.out.println("Server has been closed\n");
+						break;
+				}
 			}
 		}
 	}
+	
 }
+
 
 

@@ -4,8 +4,10 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.PrintWriter;
+import java.net.ConnectException;
 import java.net.Socket;
 import java.net.UnknownHostException;
+import java.util.InputMismatchException;
 import java.util.Random;
 import java.util.Scanner;
 import aroundearth.Server;
@@ -21,7 +23,7 @@ public class Client {
 	
 	
 	
-	public static void enterGame(int port) throws UnknownHostException, IOException {
+	public static void enterGame(int port) throws IOException {
 		
 		client_sock = new Socket("127.0.0.1", port);
 		out = new PrintWriter(client_sock.getOutputStream(), true);
@@ -48,50 +50,74 @@ public class Client {
 	public static void main(String[] args) {
 		
 		setNickname();
+		int particpate= -1;
+		int port = -1;
 
 		while(true) {
-			
 			System.out.println("1. 방 참가\n2. 방 만들기");
-			int particpate = scv.nextInt();
-			int port;
-			
-			if(particpate == 1 || particpate == 2) {
-				if(particpate == 1) {
-					// port 번호 입력 후 enterGame()
-					System.out.print("Port : ");
-					port = scv.nextInt();
+			try {
+				particpate = scv.nextInt();
+				if(particpate != 1 && particpate != 2 ) {
+					System.out.println("잘못된 번호를 입력하셨습니다. 다시 입력해주세요.\n");
+					continue;
 				}
-				else {
-					// 랜덤 생성한 port 번호를 이용하여 자동 참가
-					Random rand = new Random();
-					port = 8000 + rand.nextInt(2000);
-					System.out.println("New Room's Port number : " + port);
+				else
+					break;
+			}
+			catch(InputMismatchException e) {
+				// 예외 발생으로 scv 다시 선언
+				scv = new Scanner(System.in);
+				System.out.println("1 또는 2를 입력해주세요.\n");
+			}
+		}
+		
+
+		while(true) {
 					
-					
-					//create Server
-					try {
-						Server new_server = new Server(port);
-						new Thread(new_server).start();
-					} catch (IOException e) {
-						// TODO Auto-generated catch block
-						e.printStackTrace();
+			if(particpate == 1) {
+				// port 번호 입력 후 enterGame()
+				System.out.print("Port : ");
+				try {
+					port = scv.nextInt();
+					if(port < 8000 || port > 9999) {
+						System.out.println("Port 번호는 8000 ~ 9999 사이의 숫자입니다. 다시 입력해주세요.\n");				
+						continue;
 					}
 				}
-				
-				try {
-					enterGame(port);
-				} catch (UnknownHostException e) {
-					// TODO Auto-generated catch block
-					e.printStackTrace();
-				} catch (IOException e) {
-					// TODO Auto-generated catch block
-					e.printStackTrace();
+				catch(InputMismatchException e) {
+					// 예외 발생으로 scv 다시 선언
+					scv = new Scanner(System.in);
+					System.out.println("Port 번호는 8000 ~ 9999 사이의 숫자입니다. 다시 입력해주세요.\n");
+					continue;
 				}
 				
-				break;
 			}
-			else 
-				System.out.println("옳지 않은 값을 입력하셨습니다");
+			else {
+				// 랜덤 생성한 port 번호를 이용하여 자동 참가
+				Random rand = new Random();
+				port = 8000 + rand.nextInt(2000);
+				System.out.println("New Room's Port number : " + port);
+				
+				//create Server
+				try {
+					Server new_server = new Server(port);
+					new Thread(new_server).start();
+				} catch (IOException e) {
+					// TODO Auto-generated catch block
+					
+					System.out.println("Fail to create Server");
+				}
+			}
+
+			try {
+				enterGame(port);
+			} catch (IOException e) {
+			
+				System.out.println("서버 접속에 실패했습니다. ");
+			} 
+			
+			
+			break;
 		}
 		
 		
@@ -113,8 +139,6 @@ public class Client {
 			scv.close();
 			break;
 		}
-		
-		//scv.close();
 	}
 
 	static class ReadThread implements Runnable {
@@ -161,13 +185,10 @@ public class Client {
 			String msg;
 			while(true) {
 				try {
-					//interrupt를 쓰기 위해 100ms마다 입력이 없으면 Thread sleep
-					while(!scv.hasNextLine())
-						Thread.sleep(100);
-					
 					msg = scv.nextLine();
 					out.println(msg);
 					out.flush();
+					Thread.sleep(1);
 				} catch (InterruptedException e) {
 						System.out.println("Server has been closed\n");
 						break;
@@ -175,7 +196,6 @@ public class Client {
 			}
 		}
 	}
-	
 }
 
 

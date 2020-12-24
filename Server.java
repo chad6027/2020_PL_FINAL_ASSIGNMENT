@@ -22,10 +22,12 @@ public class Server implements Runnable{
 	
 	public int port;
 	public String who = new String("");
+	
 	private int day;
 	private int num_of_lives;
 	private int num_of_clients;
 	private Socket sock_skrull;
+
 	private final int max_clients_num = 4;
 	private final int SKRULL = 0;
 	private final int HUMAN = 1;
@@ -36,7 +38,6 @@ public class Server implements Runnable{
 	
 	private  static Socket client_sock;
 	private  static ServerSocket sSocket;
-
 	
 	private static Vector<Pair<Socket, Boolean>> client_socks_v= new Vector<Pair<Socket, Boolean>>(); 
 	private  static HashMap<String, Socket> client_socks = new HashMap<String, Socket>();
@@ -63,16 +64,15 @@ public class Server implements Runnable{
 				// TODO Auto-generated catch block
 				e.printStackTrace();
 			}
-
-			
+		
 	}
-	
+	// Client 추가
 	public synchronized void addClient(String nickname, Socket clnt_sock) {
 		client_socks.put(nickname, clnt_sock);
 		client_socks_v.add(new Pair<Socket, Boolean>(clnt_sock, true));
-		sendMsg(clnt_sock, nickname + "님이 입장하셨습니다.");
+		broadcast(nickname + "님이 입장하셨습니다.");
 	}
-	
+	// Client 제거
 	public void removeClient(String nickname) {
 		Socket clnt = client_socks.get(nickname);
 
@@ -92,9 +92,6 @@ public class Server implements Runnable{
 		if(clnt != sock_skrull)
 			num_of_lives--;
 		
-		
-		
-		
 		broadcast(nickname + "님이 퇴장하셨습니다.");
 		
 	}
@@ -108,7 +105,7 @@ public class Server implements Runnable{
 	public void night() throws GameEndException {
 		final String[] day_in_korean = {"첫", "두", "세", "네", "다섯", "여섯", "일곱", "여덟", "아홉", "열"};
 		
-		broadcast(day_in_korean[day] + "번째 밤이 왔습니다");
+		broadcast(day_in_korean[day] + "번째 밤이 되었습니다");
 		
 		if(day == 0)
 			setSkrull();
@@ -118,6 +115,8 @@ public class Server implements Runnable{
 		checkGameEnd();
 	}
 	
+	
+
 	public void setSkrull() {
 		broadcast("\nSkrull을 선정하겠습니다.");
 		Random rand = new Random();
@@ -135,25 +134,26 @@ public class Server implements Runnable{
 	}
 	
 	public int setKilled() {
-		setAllInBufferOff();
 		
 		Socket sockIsKilled;
+		// (key : nickname, value : client sock) ---> ( key : client sock, value : nickname)
+		HashMap<Socket, String> client_socks_inverse = 
+				(HashMap<Socket, String>) client_socks.entrySet()
+				.stream()
+				.collect(Collectors.toMap(Map.Entry::getValue, Map.Entry::getKey));
+		
+		
+		setAllInBufferOff();
+		
+		
 		broadcast("\nSkrull이 죽일 지구인을 고르고 있습니다...");
 		sendMsgToOne(sock_skrull, "\n지금 메세지는 Skrull에게만 보입니다.\n현재 살아있는 지구인은\n"
 				+ "------------------------------");
 		
-		
-		client_socks
-		.forEach((nickname, clnt)->{
-			
-			if(clnt != sock_skrull)
-				for( Pair<Socket, Boolean> wholive : client_socks_v) {
-					if(wholive.getFirst() == clnt && wholive.getSecond()) {
-						sendMsgToOne(sock_skrull, nickname);
-						break;
-					}
-				}	
-		});
+		client_socks_v.stream()
+		.filter( P -> P.getFirst() != sock_skrull && P.getSecond() )
+		.forEach( P -> sendMsgToOne(sock_skrull, client_socks_inverse.get(P.getFirst())));
+				
 		sendMsgToOne(sock_skrull, "------------------------------\n" 
 				+ "입니다.");
 		
@@ -177,6 +177,7 @@ public class Server implements Runnable{
 		}
 		num_of_lives--;
 		
+		
 		setInBufferOn();
 		return 0;
 	}
@@ -187,7 +188,7 @@ public class Server implements Runnable{
 		if(day++ != 0)
 			showKilledResult();
 
-		broadcast("2분동안 토론을 통해 Skrull로 의심되는 사람을 결정하세요!");
+		broadcast("2분동안 토론을 통해 Skrull로 의심되는 사람을 결정하세요!\n");
 		
 //		try {
 //			Thread.sleep(1000 * 60 * 2); //2분동안 쓰레드 정지
@@ -215,15 +216,16 @@ public class Server implements Runnable{
 	public int getVote() {
 		
 	
-		HashMap<String, Integer> result = new HashMap<String, Integer>();
-		client_socks.keySet().forEach( nick -> result.put(nick, 0));
-		
+	
 		// (key : nickname, value : client sock) ---> ( key : client sock, value : nickname)
 		HashMap<Socket, String> client_socks_inverse = 
 				(HashMap<Socket, String>) client_socks.entrySet()
 				.stream()
 				.collect(Collectors.toMap(Map.Entry::getValue, Map.Entry::getKey));
 		
+		// 투표 수를 모아놓는 HashMap result
+		HashMap<String, Integer> result = new HashMap<String, Integer>();	
+		client_socks_v.forEach( P -> { if(P.getSecond()) result.put(client_socks_inverse.get(P.getFirst()), 0);});
 		
 		
 		// ------------------------
@@ -245,7 +247,7 @@ public class Server implements Runnable{
 		
 		broadcast("\n입니다.");
 		
-		
+		// 한명씩 투표
 		for(Pair<Socket, Boolean> wholive : client_socks_v) {
 			if(wholive.getSecond()) {
 				String nickname = client_socks_inverse.get(wholive.getFirst());
@@ -262,26 +264,6 @@ public class Server implements Runnable{
 		}
 		
 		
-//		client_socks
-//		.forEach((nickname, clnt)->{
-//			for( Pair<Socket, Boolean> wholive : client_socks_v) {
-//				if(wholive.getFirst() == clnt && wholive.getSecond()) {
-//					
-//					broadcast(nickname + "님이 투표중입니다.\n");
-//					client_inBuffers.get(clnt).setSecond(true);
-//					
-//					MBox(clnt);
-//					
-//					client_inBuffers.get(clnt).setSecond(false);
-//					result.put(who, result.get(who) + 1);
-//					
-//					break;
-//				}
-//			}
-//		});
-		
-		
-		
 		broadcast("\n투표가 종료되었습니다.");
 		
 		
@@ -293,7 +275,7 @@ public class Server implements Runnable{
 			}
 		}
 		
-		// 최다 득표가 두명인지 확인
+		// 최다 득표가 두명인지 확인 --> 아무도 죽지 않는다.
 		for( String nick : result.keySet()) {
 			if(nick != whoIsKilled && result.get(nick) == max_vote) {
 				whoIsKilled = ""; 
@@ -334,7 +316,7 @@ public class Server implements Runnable{
 		broadcast("\n간밤에 Skrull에 의해" + who + "님이 죽었습니다.");
 	}
 	
-	
+	// ChatThread들과 동기화
 	public void MBox(Socket sock) {
 			synchronized (sock) {
 				try {
@@ -369,57 +351,47 @@ public class Server implements Runnable{
 		
 		if(isDone) {
 			String EndMsg = new String();
-			
+			//
 			if(winner == HUMAN) 
-				EndMsg = 	" ------------------------------------------------------\n"
-						+ 	"|														|\n"
-						+ 	"|				Skrull이 죽어 Human의 승리입니다 !!			|\n"
-						+ 	"|														|\n"
-						+ 	" ------------------------------------------------------\n";
+				EndMsg = "\n\n\n*****************		Skrull이 죽어 Human의 승리입니다 !!		*****************|\n\n\n";
+						
 			
 			else 
-				EndMsg = 	" -------------------------------------------------------\n"
-						+ 	"|														|\n"
-						+ 	"|		Human이 한명 남아 이길 수 없으므로 Skrull의 승리입니다 !!		|\n"
-						+ 	"|														|\n"
-						+ 	" ------------------------------------------------------\n";
+				EndMsg = "\n\n\n*****************		Human이 한명 남아 이길 수 없으므로 Skrull의 승리입니다 !!		*****************|\n\n\n"; 	
 			
 			throw new GameEndException(EndMsg);
 			
 		}
 	}
 	
-	
-	public static void sendMsgToOne(Socket sock, String msg) {
+	// 한 클라이언트에게만 메세지 
+	public static synchronized void sendMsgToOne(Socket sock, String msg) {
 		Socket clnt = sock;
 		client_outBuffers.get(clnt).println(msg);
 	}
-	
-	public static synchronized void sendMsg(Socket sock, String msg) {
-		Socket clnt_from = sock;
-		client_outBuffers.forEach((clnt, out)->{ if(clnt != clnt_from) out.println(msg);});
-	}
-
+	// 모든 클라이언트에게 메세지
 	public static synchronized void broadcast(String msg) {
 		client_outBuffers.forEach((clnt, out)->{out.println(msg);});
 	}
 
-	
+	// Client들 중 살아있는 클라이언트의 메세지만 받는다.
 	public static void setInBufferOn() {
-		client_socks_v.forEach( 
+		client_socks_v
+		.forEach( 
 			(clnt)->{ if(clnt.getSecond()) 
 						client_inBuffers.get(clnt.getFirst()).setSecond(true);
 					}
 			);
 	}
 	
+	// 모든 메세지 무시
 	public static void setAllInBufferOff() {
-		client_inBuffers.forEach((clnt, in)->{in.setSecond(false);});
+		client_inBuffers.forEach( (clnt, in)->{in.setSecond(false);});
 	}
 	
 	
 	public void startGame() {
-		broadcast("******************//Game Start//******************");
+		broadcast("\n\n\n******************// Game Start //******************\n\n\n");
 		num_of_lives = max_clients_num - 1;
 		day = 0;
 		
@@ -428,7 +400,6 @@ public class Server implements Runnable{
 		}
 		
 		setInBufferOn();
-
 	}
 
 	@Override
@@ -453,10 +424,10 @@ public class Server implements Runnable{
 				}
 				catch(GameEndException e) {			// Game 종료 exception 발생
 					broadcast(e.getMessage());
-					broadcast("\n5초 후 다음 게임을 시작합니다...");
+					broadcast("\n10초 후 다음 게임을 시작합니다...");
 					
 					try {
-						Thread.sleep(5000);
+						Thread.sleep(10 * 1000);
 					} catch (InterruptedException e1) {
 
 					}
@@ -486,7 +457,7 @@ public class Server implements Runnable{
 			addClient(nickname, client_sock);
 			addBuffer(client_sock, br, out);
 			
-			sendMsg(clnt_sock, nickname + " has entered the chat");
+			broadcast(nickname + " has entered the chat");
 		}
 		
 
@@ -504,23 +475,61 @@ public class Server implements Runnable{
 						continue;
 					}
 					
-					if(VOTE_MODE || KILL_MODE) {					
-						if(client_socks.containsKey(client_msg)) {
-							synchronized(clnt_sock) {
-								who = client_msg;
-								clnt_sock.notify();
-							}
+					// MODE ON
+					if(VOTE_MODE || KILL_MODE) {
+						
+						// 받은 String이 자기 자신이 아니고, 다른 이용자의 nickname이면
+						if(!nickname.equals(client_msg) && client_socks.containsKey(client_msg)) {
+							boolean isLive = false;
+							for( Pair<Socket, Boolean> wholive : client_socks_v) 
+								if(wholive.getFirst()== client_socks.get(client_msg)) {
+									isLive = true; 
+									break;
+								}
+							
+							
+							// 살아있는 사람이라면
+							if(isLive)
+								synchronized(clnt_sock) {
+									who = client_msg;
+									clnt_sock.notify(); 	// main thread의 lock이 풀림
+								}
+							//죽은 사람
+							else
+								sendMsgToOne(clnt_sock, "이미 죽은 사람은 뽑을 수 없습니다.");
+							
+							//-------------------------------------------------------------------------------------------------
+							//  
+//							Map<Socket, Boolean> survivors_map = client_socks_v.stream().collect(Collectors.toMap(Pair::getFirst, Pair::getSecond));
+//							
+							// 살아있다면
+//							if(survivors_map.get(client_socks.get(client_msg)))
+//								synchronized(clnt_sock) {
+//									who = client_msg;
+//									clnt_sock.notify(); 	// main thread의 lock이 풀림
+//								}
+							// 죽었다면
+//							else
+//								sendMsgToOne(clnt_sock, "이미 죽은 사람은 뽑을 수 없습니다.");
+							//--------------------------------------------------------------------------------------------------
+							
+							
 						}
 						else {
-							sendMsgToOne(clnt_sock, "다시 입력해주세요");
+							if(nickname.equals(client_msg))
+								sendMsgToOne(clnt_sock, "자기 자신을 뽑을 수 없습니다.");
+							else
+								sendMsgToOne(clnt_sock, "뽑을 사람의 이름을 정확하게 입력해주세요");
 						}
 							
 					}
-					else{
-						broadcast(nickname + " : " + client_msg);
-					}	
+					
+					else
+						broadcast(nickname + " : " + client_msg); // Chatting
+					
 				}
 			} catch (IOException e) {
+				// client의 접속 종료
 				removeClient(nickname);
 			}
 		}

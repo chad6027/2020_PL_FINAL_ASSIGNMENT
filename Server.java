@@ -93,7 +93,6 @@ public class Server implements Runnable{
 			num_of_lives--;
 		
 		broadcast(nickname + "¥‘¿Ã ≈¿Â«œºÃΩ¿¥œ¥Ÿ.");
-		
 	}
 	
 	public synchronized void addBuffer(Socket clnt_sock, BufferedReader br, PrintWriter out) {

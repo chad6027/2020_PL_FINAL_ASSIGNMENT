@@ -20,9 +20,7 @@ public class Client {
 	private static Scanner scv = new Scanner(System.in);
 	private static Thread rT;
 	private static Thread wT;
-	
-	
-	
+
 	public static void enterGame(int port) throws IOException {
 		
 		client_sock = new Socket("127.0.0.1", port);

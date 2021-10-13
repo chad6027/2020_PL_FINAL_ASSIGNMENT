@@ -10,3 +10,4 @@
 3. 강의 시간에 배운 exception handling, socket, parallel operation, concurrent(threadpool) 등등을 최대한 활용하여
    제작하였습니다.  
 
+![화면 캡처 2021-10-13 164307](https://user-images.githubusercontent.com/49097337/137089290-82ca4071-15ea-4e35-8112-4111f472ea3d.jpg)
